@@ -173,9 +173,10 @@ def incremental_load(
             ),
         ]
         if run:
-            # Args are embedded into the image, so omitted here.
+            # Args are embedded into the image as CMD, so pass any command-line
+            # arguments here to override those.
             run_statements += [
-                "docker run %s %s" % (run_flags, tag_reference),
+                "\"${DOCKER}\" run %s %s \"$@\"" % (run_flags, tag_reference),
             ]
 
     ctx.actions.expand_template(
