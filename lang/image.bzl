@@ -23,14 +23,26 @@ load(
     _get_layers = "get_from_target",
 )
 load("//container:providers.bzl", "FilterAspectInfo", "FilterLayerInfo")
+load("//platform:transition.bzl", "docker_platform_transition")
+
+def _coerce_list_to_item(item_or_list):
+    # TODO(clint): remove this once we don't force a single-valued split cfg transition
+    if type(item_or_list) == "list":
+        if len(item_or_list) != 1:
+            fail("item is expected to be a list of length 1, when configuration transitions are used")
+        return item_or_list[0]
+    else:
+        return item_or_list
 
 def _binary_name(ctx):
+    binary = _coerce_list_to_item(ctx.attr.binary)
+
     # For //foo/bar/baz:blah this would translate to
     # /app/foo/bar/baz/blah
     return "/".join([
         ctx.attr.directory,
-        ctx.attr.binary.label.package,
-        ctx.attr.binary.label.name,
+        binary.label.package,
+        binary.label.name,
     ])
 
 def _runfiles_dir(ctx):
@@ -128,11 +140,15 @@ def app_layer_impl(ctx, runfiles = None, emptyfiles = None):
     emptyfiles = emptyfiles or _default_emptyfiles
     workdir = None
 
+    # TODO(clint): remove this once we don't force a single-valued split cfg transition
+    attr_dep = _coerce_list_to_item(ctx.attr.dep)
+    attr_binary = _coerce_list_to_item(ctx.attr.binary)
+
     parent_parts = _get_layers(ctx, ctx.attr.name, ctx.attr.base)
     filepath = _final_file_path if ctx.attr.binary else layer_file_path
     emptyfilepath = _final_emptyfile_path if ctx.attr.binary else _layer_emptyfile_path
-    dep = ctx.attr.dep or ctx.attr.binary
-    top_layer = ctx.attr.binary and not ctx.attr.dep
+    dep = attr_dep or attr_binary
+    top_layer = attr_binary and not attr_dep
 
     # Compute the set of runfiles that have been made available
     # in our base image, tracking absolute paths.
@@ -160,7 +176,7 @@ def app_layer_impl(ctx, runfiles = None, emptyfiles = None):
 
     # If the caller provided the binary that will eventually form the
     # app layer, we can already create symlinks to the runfiles path.
-    if ctx.attr.binary:
+    if attr_binary:
         # Include any symlinks from the runfiles of the target for which we are synthesizing the layer.
         symlinks.update({
             (_reference_dir(ctx) + "/" + s.path): layer_file_path(ctx, s.target_file)
@@ -223,7 +239,10 @@ _app_layer = rule(
         # the runfiles dir.
         "binary": attr.label(
             executable = True,
-            cfg = "target",
+            cfg = docker_platform_transition,
+        ),
+        "_whitelist_function_transition": attr.label(
+            default = "@//tools/whitelists/function_transition_whitelist",
         ),
         # The dependency whose runfiles we're appending.
         # If not specified, then the layer will be treated as the top layer,
