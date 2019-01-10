@@ -241,6 +241,7 @@ _app_layer = rule(
             executable = True,
             cfg = docker_platform_transition,
         ),
+        "legacy_transition_behavior": attr.bool(default = True),
         "_whitelist_function_transition": attr.label(
             default = "@//tools/whitelists/function_transition_whitelist",
         ),
